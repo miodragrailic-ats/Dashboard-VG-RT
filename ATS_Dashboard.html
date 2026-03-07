@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATS Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f4f6fb; --surface:#fff; --surface2:#eef1f8; --border:#dde2ef;
+  --navy:#1a2f5e; --navy2:#243d7a; --navy3:#2e5090; --text:#1a2035; --muted:#6b7a99;
+  --zaposlen-dark:#1a5c2a; --zaposlen-light:#e8f5ec; --zaposlen-mid:#2e9e4f;
+  --odbijen-dark:#8b0000;  --odbijen-light:#fdeaea;  --odbijen-mid:#d63030;
+  --odustao-dark:#7a3200;  --odustao-light:#fef0e6;  --odustao-mid:#e07020;
+  --pojavio-dark:#374151;  --pojavio-light:#f3f4f6;  --pojavio-mid:#6b7280;
+  --feedback-dark:#1e3a6e; --feedback-light:#e8f0fd;  --feedback-mid:#3b6fd4;
+  --neslaganje-dark:#4a1060;--neslaganje-light:#f5eafb;--neslaganje-mid:#9333ea;
+  --zakazano-dark:#0c4a6e; --zakazano-light:#e0f2fe;  --zakazano-mid:#0284c7;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text);font-size:13px;}
+
+#drop-zone{position:fixed;inset:0;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;z-index:1000;transition:opacity .3s;}
+#drop-zone.hidden{opacity:0;pointer-events:none;}
+#drop-zone h1{color:#fff;font-size:28px;font-weight:700;letter-spacing:-.5px;}
+#drop-zone p{color:#8fa4cc;font-size:14px;}
+.drop-box{border:2px dashed #4a6fa5;border-radius:16px;padding:48px 64px;text-align:center;color:#8fa4cc;cursor:pointer;transition:all .2s;background:rgba(255,255,255,.04);}
+.drop-box:hover,.drop-box.over{border-color:#7aa2e0;background:rgba(255,255,255,.08);color:#c0d4f0;}
+.drop-icon{font-size:48px;margin-bottom:12px;}
+.drop-box input{display:none;}
+.drop-btn{margin-top:16px;background:#2e5090;color:#fff;border:none;padding:11px 28px;border-radius:8px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s;}
+.drop-btn:hover{background:#3a63b0;}
+
+#app{display:none;}
+#app.visible{display:block;}
+.top-bar{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:100;}
+.top-bar h1{color:#fff;font-size:15px;font-weight:700;letter-spacing:-.2px;}
+.top-bar h1 span{color:#7aa2e0;}
+.top-bar-right{display:flex;align-items:center;gap:12px;}
+.total-chip{background:rgba(255,255,255,.12);color:#c0d4f0;font-size:12px;padding:4px 12px;border-radius:20px;font-family:'IBM Plex Mono',monospace;font-weight:500;}
+.reload-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#c0d4f0;font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:5px 14px;border-radius:6px;cursor:pointer;transition:all .2s;}
+.reload-btn:hover{background:rgba(255,255,255,.18);}
+
+.filters{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.filter-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.7px;white-space:nowrap;}
+select{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;outline:none;transition:border-color .15s;min-width:120px;}
+select:focus{border-color:var(--navy3);}
+.sep{width:1px;height:22px;background:var(--border);margin:0 4px;}
+.reset-btn{background:transparent;border:1px solid var(--border);color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;transition:all .15s;}
+.reset-btn:hover{border-color:var(--navy3);color:var(--navy3);}
+.filter-info{font-size:11px;color:var(--muted);margin-left:auto;font-family:'IBM Plex Mono',monospace;}
+
+.kpi-section{padding:16px 24px 0;}
+.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;}
+.kpi-grid{display:grid;grid-template-columns:1.4fr repeat(7,1fr);gap:8px;}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;position:relative;overflow:hidden;}
+.kpi-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;}
+.kpi-total::after{background:linear-gradient(90deg,var(--navy),var(--navy3));}
+.kpi-zaposlen::after{background:var(--zaposlen-mid);}
+.kpi-odbijen::after{background:var(--odbijen-mid);}
+.kpi-odustao::after{background:var(--odustao-mid);}
+.kpi-pojavio::after{background:var(--pojavio-mid);}
+.kpi-feedback::after{background:var(--feedback-mid);}
+.kpi-neslaganje::after{background:var(--neslaganje-mid);}
+.kpi-zakazano::after{background:var(--zakazano-mid);}
+.kpi-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px;}
+.kpi-val{font-size:32px;font-weight:700;font-family:'IBM Plex Mono',monospace;line-height:1;}
+.kpi-total .kpi-val{color:var(--navy);}
+.kpi-zaposlen .kpi-val{color:var(--zaposlen-dark);}
+.kpi-odbijen .kpi-val{color:var(--odbijen-dark);}
+.kpi-odustao .kpi-val{color:var(--odustao-dark);}
+.kpi-pojavio .kpi-val{color:var(--pojavio-dark);}
+.kpi-feedback .kpi-val{color:var(--feedback-dark);}
+.kpi-neslaganje .kpi-val{color:var(--neslaganje-dark);}
+.kpi-zakazano .kpi-val{color:var(--zakazano-dark);}
+.kpi-pct{font-size:11px;color:var(--muted);margin-top:3px;}
+
+.tables-wrap{padding:16px 24px 24px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.tbl-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.tbl-card.wide{grid-column:span 2;}
+.tbl-card.full{grid-column:span 4;}
+.tbl-head{background:var(--navy);color:#fff;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:9px 14px;}
+table{width:100%;border-collapse:collapse;}
+th{padding:7px 10px;text-align:left;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:var(--surface2);border-bottom:1px solid var(--border);}
+th.r{text-align:right;}
+td{padding:7px 10px;font-size:12px;border-bottom:1px solid #f0f2f8;}
+td.r{text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+td.pct{text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:#f8f9fd;}
+.row-ukupno td{background:var(--navy)!important;color:#fff!important;font-weight:700;}
+.row-ukupno td.pct{color:rgba(255,255,255,.6)!important;}
+.s-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;}
+</style>
+</head>
+<body>
+
+<div id="drop-zone">
+  <h1>ATS <span style="color:#7aa2e0">Dashboard</span></h1>
+  <p>Prevuci Excel fajl ili klikni da odabereš</p>
+  <div class="drop-box" id="drop-box">
+    <div class="drop-icon">📊</div>
+    <div style="font-size:15px;font-weight:600;margin-bottom:6px">ATS_Dashboard_Finale1.xlsx</div>
+    <div style="font-size:12px;margin-bottom:4px">Prevuci fajl ovdje</div>
+    <div style="font-size:11px;color:#6a84aa">ili</div>
+    <input type="file" id="file-input" accept=".xlsx,.xls">
+    <button class="drop-btn" onclick="document.getElementById('file-input').click()">Odaberi fajl</button>
+  </div>
+</div>
+
+<div id="app">
+  <div class="top-bar">
+    <h1>ATS <span>Dashboard</span> — Pregled 1. kruga selekcije</h1>
+    <div class="top-bar-right">
+      <span class="total-chip" id="chip-total">—</span>
+      <button class="reload-btn" onclick="showDrop()">↑ Novi fajl</button>
+    </div>
+  </div>
+  <div class="filters">
+    <span class="filter-label">Filtriraj:</span>
+    <select id="f-drzava"><option value="">Sve države</option></select>
+    <select id="f-status"><option value="">Svi statusi</option></select>
+    <select id="f-pozicija"><option value="">Sve pozicije</option></select>
+    <select id="f-bl"><option value="">Svi BL</option></select>
+    <select id="f-faza"><option value="">Sve faze</option></select>
+    <select id="f-grad"><option value="">Svi gradovi</option></select>
+    <div class="sep"></div>
+    <button class="reset-btn" onclick="resetFilters()">✕ Reset</button>
+    <span class="filter-info" id="filter-info"></span>
+  </div>
+  <div class="kpi-section">
+    <div class="section-title">Ključni pokazatelji</div>
+    <div class="kpi-grid" id="kpi-grid"></div>
+  </div>
+  <div class="tables-wrap" id="tables-wrap"></div>
+</div>
+
+<script>
+const STATUS_META = {
+  'Zaposlen':     {cls:'zaposlen', short:'Zaposlen'},
+  'Odbijen':      {cls:'odbijen',  short:'Odbijen'},
+  'Odustao':      {cls:'odustao',  short:'Odustao'},
+  'Nije se pojavio na razgovoru':{cls:'pojavio',short:'Nije se pojavio'},
+  'Čeka se feedback':{cls:'feedback',short:'Čeka feedback'},
+  'Neslaganje uslova/logistike':{cls:'neslaganje',short:'Neslaganje'},
+  'Zakazano':     {cls:'zakazano', short:'Zakazano'},
+};
+const STATUS_ORDER = Object.keys(STATUS_META);
+const STATUS_STYLE = {
+  'Zaposlen':'background:var(--zaposlen-light);color:var(--zaposlen-dark)',
+  'Odbijen':'background:var(--odbijen-light);color:var(--odbijen-dark)',
+  'Odustao':'background:var(--odustao-light);color:var(--odustao-dark)',
+  'Nije se pojavio na razgovoru':'background:var(--pojavio-light);color:var(--pojavio-dark)',
+  'Čeka se feedback':'background:var(--feedback-light);color:var(--feedback-dark)',
+  'Neslaganje uslova/logistike':'background:var(--neslaganje-light);color:var(--neslaganje-dark)',
+  'Zakazano':'background:var(--zakazano-light);color:var(--zakazano-dark)',
+};
+
+let allData=[], filtered=[];
+
+// Drop zone
+const dropBox=document.getElementById('drop-box');
+const fileInput=document.getElementById('file-input');
+dropBox.addEventListener('dragover',e=>{e.preventDefault();dropBox.classList.add('over');});
+dropBox.addEventListener('dragleave',()=>dropBox.classList.remove('over'));
+dropBox.addEventListener('drop',e=>{e.preventDefault();dropBox.classList.remove('over');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+
+function showDrop(){
+  document.getElementById('drop-zone').classList.remove('hidden');
+  document.getElementById('app').classList.remove('visible');
+}
+
+function loadFile(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const wb=XLSX.read(e.target.result,{type:'array'});
+    const sheetName=wb.SheetNames.find(n=>n.toLowerCase().includes('kandidat'))||wb.SheetNames[0];
+    const ws=wb.Sheets[sheetName];
+    const raw=XLSX.utils.sheet_to_json(ws,{defval:''});
+    allData=raw.map(row=>{
+      const clean={};
+      Object.keys(row).forEach(k=>{
+        const nk=k.replace(/\s+/g,' ').trim();
+        clean[nk]=String(row[k]).trim();
+      });
+      return clean;
+    }).filter(r=>r['Ime i prezime']&&r['Ime i prezime']!=='');
+    filtered=[...allData];
+    populateFilters();
+    addListeners();
+    render();
+    document.getElementById('drop-zone').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function unique(data,fn){return[...new Set(data.map(fn).filter(Boolean))].sort();}
+
+function populateFilters(){
+  const fill=(id,vals,all)=>{
+    const sel=document.getElementById(id);
+    const cur=sel.value;
+    sel.innerHTML=`<option value="">${all}</option>`;
+    vals.forEach(v=>sel.innerHTML+=`<option value="${v}"${cur===v?' selected':''}>${v}</option>`);
+  };
+  fill('f-drzava',unique(allData,r=>r['Drzava']),'Sve države');
+  fill('f-status',unique(allData,r=>r['Status']),'Svi statusi');
+  fill('f-pozicija',unique(allData,r=>r['Pozicija']),'Sve pozicije');
+  fill('f-bl',unique(allData,r=>r['BL']),'Svi BL');
+  fill('f-faza',unique(allData,r=>r['Faza selekcije']),'Sve faze');
+  fill('f-grad',unique(allData,r=>r['Grad']),'Svi gradovi');
+}
+
+function addListeners(){
+  ['f-drzava','f-status','f-pozicija','f-bl','f-faza','f-grad'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.replaceWith(el.cloneNode(true));
+    document.getElementById(id).addEventListener('change',applyFilters);
+  });
+}
+
+function applyFilters(){
+  const v=id=>document.getElementById(id).value;
+  filtered=allData.filter(r=>
+    (!v('f-drzava')||r['Drzava']===v('f-drzava'))&&
+    (!v('f-status')||r['Status']===v('f-status'))&&
+    (!v('f-pozicija')||r['Pozicija']===v('f-pozicija'))&&
+    (!v('f-bl')||r['BL']===v('f-bl'))&&
+    (!v('f-faza')||r['Faza selekcije']===v('f-faza'))&&
+    (!v('f-grad')||r['Grad']===v('f-grad'))
+  );
+  const active=['f-drzava','f-status','f-pozicija','f-bl','f-faza','f-grad'].filter(id=>document.getElementById(id).value).length;
+  document.getElementById('filter-info').textContent=active>0?`${active} filtera aktivno`:'';
+  render();
+}
+
+function resetFilters(){
+  ['f-drzava','f-status','f-pozicija','f-bl','f-faza','f-grad'].forEach(id=>document.getElementById(id).value='');
+  filtered=[...allData];
+  document.getElementById('filter-info').textContent='';
+  render();
+}
+
+function countBy(data,fn){
+  const m={};
+  data.forEach(r=>{const v=fn(r);if(v)m[v]=(m[v]||0)+1;});
+  return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+}
+function pct(n,t){return t?Math.round(n/t*100)+'%':'0%';}
+
+function render(){
+  const total=filtered.length;
+  document.getElementById('chip-total').textContent=`${total} kandidata`;
+
+  // KPI
+  let kpi=`<div class="kpi-card kpi-total"><div class="kpi-lbl">Ukupno</div><div class="kpi-val">${total}</div><div class="kpi-pct">kandidata</div></div>`;
+  STATUS_ORDER.forEach(s=>{
+    const m=STATUS_META[s];
+    const cnt=filtered.filter(r=>r['Status']===s).length;
+    kpi+=`<div class="kpi-card kpi-${m.cls}"><div class="kpi-lbl">${m.short}</div><div class="kpi-val">${cnt}</div><div class="kpi-pct">${pct(cnt,total)}</div></div>`;
+  });
+  document.getElementById('kpi-grid').innerHTML=kpi;
+
+  function tbl(title,rows,cls=''){
+    const hdrs=rows[0];
+    const data=rows.slice(1);
+    let th='<tr>';
+    hdrs.forEach(h=>{
+      if(h.startsWith('r:'))th+=`<th class="r">${h.slice(2)}</th>`;
+      else if(h.startsWith('p:'))th+=`<th class="r">${h.slice(2)}</th>`;
+      else th+=`<th>${h}</th>`;
+    });
+    th+='</tr>';
+    let tb='';
+    data.forEach(row=>{
+      const isU=row[0]==='__u__';
+      tb+=`<tr class="${isU?'row-ukupno':''}">`;
+      row.forEach((cell,i)=>{
+        const h=hdrs[i];
+        const isR=h.startsWith('r:');
+        const isP=h.startsWith('p:');
+        tb+=`<td class="${isP?'pct':isR?'r':''}">${isU&&i===0?'UKUPNO':cell}</td>`;
+      });
+      tb+='</tr>';
+    });
+    return `<div class="tbl-card ${cls}"><div class="tbl-head">${title}</div><table><thead>${th}</thead><tbody>${tb}</tbody></table></div>`;
+  }
+
+  let html='';
+
+  // STATUS
+  html+=tbl('STATUS',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Status']).map(([v,c])=>[`<span class="s-badge" style="${STATUS_STYLE[v]||''}">${v}</span>`,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  // DRŽAVA
+  html+=tbl('DRŽAVA',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Drzava']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  // BL
+  html+=tbl('BL',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['BL']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  // FILIJALA
+  html+=tbl('FILIJALA',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Filijala']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  // GRAD (wide)
+  html+=tbl('GRAD',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Grad']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ],'wide');
+
+  // POZICIJA
+  html+=tbl('POZICIJA',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Pozicija']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  // IZVOR PRIJAVE
+  html+=tbl('IZVOR PRIJAVE',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Izvor kandidata']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  // VRSTA RAZGOVORA
+  html+=tbl('VRSTA RAZGOVORA',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Vrsta razgovora']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  // FAZA SELEKCIJE
+  html+=tbl('FAZA SELEKCIJE',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Faza selekcije']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  // EVALUACIJA
+  html+=tbl('EVALUACIJA',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Evaluacija']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  // RAZLOG (wide)
+  html+=tbl('RAZLOG',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Razlog']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ],'wide');
+
+  document.getElementById('tables-wrap').innerHTML=html;
+}
+</script>
+</body>
+</html>
