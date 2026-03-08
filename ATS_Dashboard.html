@@ -50,6 +50,8 @@ select:focus{border-color:var(--navy3);}
 .reset-btn{background:transparent;border:1px solid var(--border);color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;transition:all .15s;}
 .reset-btn:hover{border-color:var(--navy3);color:var(--navy3);}
 .filter-info{font-size:11px;color:var(--muted);margin-left:auto;font-family:'IBM Plex Mono',monospace;}
+input[type="date"]{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;outline:none;transition:border-color .15s;}
+input[type="date"]:focus{border-color:var(--navy3);}
 
 .kpi-section{padding:16px 24px 0;}
 .section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;}
@@ -125,6 +127,16 @@ tr:hover td{background:#f8f9fd;}
     <select id="f-bl"><option value="">Svi BL</option></select>
     <select id="f-faza"><option value="">Sve faze</option></select>
     <select id="f-grad"><option value="">Svi gradovi</option></select>
+    <select id="f-filijala"><option value="">Sve filijale</option></select>
+    <select id="f-izvor"><option value="">Svi izvori</option></select>
+    <select id="f-vrsta"><option value="">Sve vrste</option></select>
+    <select id="f-evaluacija"><option value="">Sve evaluacije</option></select>
+    <select id="f-razlog"><option value="">Svi razlozi</option></select>
+    <div class="sep"></div>
+    <span class="filter-label">Datum:</span>
+    <input type="date" id="f-datum-od" title="Od datuma" onchange="applyFilters()">
+    <span style="color:var(--muted);font-size:12px">—</span>
+    <input type="date" id="f-datum-do" title="Do datuma" onchange="applyFilters()">
     <div class="sep"></div>
     <button class="reset-btn" onclick="resetFilters()">✕ Reset</button>
     <span class="filter-info" id="filter-info"></span>
@@ -212,10 +224,15 @@ function populateFilters(){
   fill('f-bl',unique(allData,r=>r['BL']),'Svi BL');
   fill('f-faza',unique(allData,r=>r['Faza selekcije']),'Sve faze');
   fill('f-grad',unique(allData,r=>r['Grad']),'Svi gradovi');
+  fill('f-filijala',unique(allData,r=>r['Filijala']),'Sve filijale');
+  fill('f-izvor',unique(allData,r=>r['Izvor kandidata']),'Svi izvori');
+  fill('f-vrsta',unique(allData,r=>r['Vrsta razgovora']),'Sve vrste');
+  fill('f-evaluacija',unique(allData,r=>r['Evaluacija']),'Sve evaluacije');
+  fill('f-razlog',unique(allData,r=>r['Razlog']),'Svi razlozi');
 }
 
 function addListeners(){
-  ['f-drzava','f-status','f-pozicija','f-bl','f-faza','f-grad'].forEach(id=>{
+  ['f-drzava','f-status','f-pozicija','f-bl','f-faza','f-grad','f-filijala','f-izvor','f-vrsta','f-evaluacija','f-razlog'].forEach(id=>{
     const el=document.getElementById(id);
     el.replaceWith(el.cloneNode(true));
     document.getElementById(id).addEventListener('change',applyFilters);
@@ -230,15 +247,47 @@ function applyFilters(){
     (!v('f-pozicija')||r['Pozicija']===v('f-pozicija'))&&
     (!v('f-bl')||r['BL']===v('f-bl'))&&
     (!v('f-faza')||r['Faza selekcije']===v('f-faza'))&&
-    (!v('f-grad')||r['Grad']===v('f-grad'))
+    (!v('f-grad')||r['Grad']===v('f-grad'))&&
+    (!v('f-filijala')||r['Filijala']===v('f-filijala'))&&
+    (!v('f-izvor')||r['Izvor kandidata']===v('f-izvor'))&&
+    (!v('f-vrsta')||r['Vrsta razgovora']===v('f-vrsta'))&&
+    (!v('f-evaluacija')||r['Evaluacija']===v('f-evaluacija'))&&
+    (!v('f-razlog')||r['Razlog']===v('f-razlog'))
   );
-  const active=['f-drzava','f-status','f-pozicija','f-bl','f-faza','f-grad'].filter(id=>document.getElementById(id).value).length;
+  // Date filter
+  const od = document.getElementById('f-datum-od').value;
+  const doo = document.getElementById('f-datum-do').value;
+  if (od || doo) {
+    filtered = filtered.filter(r => {
+      const raw = r['Datum intervjua 1.krug'] || r['Datum intervjua\n1.krug'] || '';
+      if (!raw || raw === '') return false;
+      // Parse date - Excel serial or string
+      let d;
+      if (!isNaN(raw)) {
+        // Excel serial number
+        const excelDate = new Date((parseFloat(raw) - 25569) * 86400 * 1000);
+        d = excelDate.toISOString().split('T')[0];
+      } else {
+        // Try to parse string date
+        const parsed = new Date(raw);
+        if (!isNaN(parsed)) d = parsed.toISOString().split('T')[0];
+        else return true; // can't parse, don't filter out
+      }
+      if (od && d < od) return false;
+      if (doo && d > doo) return false;
+      return true;
+    });
+  }
+  const active=['f-drzava','f-status','f-pozicija','f-bl','f-faza','f-grad','f-filijala','f-izvor','f-vrsta','f-evaluacija','f-razlog'].filter(id=>document.getElementById(id).value).length
+    + (od?1:0) + (doo?1:0);
   document.getElementById('filter-info').textContent=active>0?`${active} filtera aktivno`:'';
   render();
 }
 
 function resetFilters(){
-  ['f-drzava','f-status','f-pozicija','f-bl','f-faza','f-grad'].forEach(id=>document.getElementById(id).value='');
+  ['f-drzava','f-status','f-pozicija','f-bl','f-faza','f-grad','f-filijala','f-izvor','f-vrsta','f-evaluacija','f-razlog'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-datum-od').value='';
+  document.getElementById('f-datum-do').value='';
   filtered=[...allData];
   document.getElementById('filter-info').textContent='';
   render();
