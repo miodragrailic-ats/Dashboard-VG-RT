@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATS Dashboard — BL 1. krug</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f4f6fb; --surface:#fff; --surface2:#eef1f8; --border:#dde2ef;
+  --navy:#1a2f5e; --navy2:#243d7a; --navy3:#2e5090; --text:#1a2035; --muted:#6b7a99;
+  --zaposlen-dark:#1a5c2a; --zaposlen-light:#e8f5ec; --zaposlen-mid:#2e9e4f;
+  --odbijen-dark:#8b0000;  --odbijen-light:#fdeaea;  --odbijen-mid:#d63030;
+  --odustao-dark:#7a3200;  --odustao-light:#fef0e6;  --odustao-mid:#e07020;
+  --pojavio-dark:#374151;  --pojavio-light:#f3f4f6;  --pojavio-mid:#6b7280;
+  --feedback-dark:#1e3a6e; --feedback-light:#e8f0fd;  --feedback-mid:#3b6fd4;
+  --neslaganje-dark:#4a1060;--neslaganje-light:#f5eafb;--neslaganje-mid:#9333ea;
+  --zakazano-dark:#0c4a6e; --zakazano-light:#e0f2fe;  --zakazano-mid:#0284c7;
+  --razmislja-dark:#854d0e; --razmislja-light:#fef9c3; --razmislja-mid:#ca8a04;
+  --uobradi-dark:#065f46;  --uobradi-light:#d1fae5;   --uobradi-mid:#059669;
+  --odbijenica-dark:#7c2d12; --odbijenica-light:#ffedd5; --odbijenica-mid:#ea580c;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text);font-size:13px;}
+
+/* DROP ZONE */
+#drop-zone{position:fixed;inset:0;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;z-index:1000;transition:opacity .3s;}
+#drop-zone.hidden{opacity:0;pointer-events:none;}
+#drop-zone h1{color:#fff;font-size:28px;font-weight:700;}
+#drop-zone p{color:#8fa4cc;font-size:14px;}
+.drop-box{border:2px dashed #4a6fa5;border-radius:16px;padding:48px 64px;text-align:center;color:#8fa4cc;cursor:pointer;transition:all .2s;background:rgba(255,255,255,.04);}
+.drop-box:hover,.drop-box.over{border-color:#7aa2e0;background:rgba(255,255,255,.08);color:#c0d4f0;}
+.drop-icon{font-size:48px;margin-bottom:12px;}
+.drop-box input{display:none;}
+.drop-btn{margin-top:16px;background:#2e5090;color:#fff;border:none;padding:11px 28px;border-radius:8px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;}
+.drop-btn:hover{background:#3a63b0;}
+
+/* APP */
+#app{display:none;}
+#app.visible{display:block;}
+.top-bar{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:100;}
+.top-bar h1{color:#fff;font-size:15px;font-weight:700;}
+.top-bar h1 span{color:#7aa2e0;}
+.top-bar-right{display:flex;align-items:center;gap:12px;}
+.total-chip{background:rgba(255,255,255,.12);color:#c0d4f0;font-size:12px;padding:4px 12px;border-radius:20px;font-family:'IBM Plex Mono',monospace;}
+.reload-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#c0d4f0;font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:5px 14px;border-radius:6px;cursor:pointer;}
+.reload-btn:hover{background:rgba(255,255,255,.18);}
+
+/* FILTERS */
+.filters{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:relative;}
+.filter-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.7px;}
+.sep{width:1px;height:22px;background:var(--border);margin:0 4px;}
+.reset-btn{background:transparent;border:1px solid var(--border);color:var(--muted);font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;}
+.reset-btn:hover{border-color:var(--navy3);color:var(--navy3);}
+.filter-info{font-size:11px;color:var(--muted);margin-left:auto;font-family:'IBM Plex Mono',monospace;}
+
+/* MULTI-SELECT FILTER BUTTON */
+.ms-wrap{position:relative;}
+.ms-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text);
+  font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:6px 10px;
+  border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:6px;
+  white-space:nowrap;transition:border-color .15s;
+}
+.ms-btn:hover{border-color:var(--navy3);}
+.ms-btn.active{border-color:var(--navy3);background:#e8f0fd;}
+.ms-btn .count{background:var(--navy);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700;}
+.ms-btn .arrow{font-size:9px;color:var(--muted);}
+
+/* DROPDOWN PANEL */
+.ms-dropdown{
+  position:absolute;top:calc(100% + 6px);left:0;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);
+  min-width:180px;max-width:240px;z-index:500;
+  display:none;
+}
+.ms-dropdown.open{display:block;}
+.ms-search{padding:8px;border-bottom:1px solid var(--border);}
+.ms-search input{width:100%;border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;outline:none;}
+.ms-search input:focus{border-color:var(--navy3);}
+.ms-list{max-height:200px;overflow-y:auto;padding:4px 0;}
+.ms-item{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;transition:background .1s;}
+.ms-item:hover{background:var(--surface2);}
+.ms-item input[type=checkbox]{cursor:pointer;accent-color:var(--navy3);}
+.ms-item label{font-size:12px;cursor:pointer;flex:1;}
+.ms-footer{padding:8px;border-top:1px solid var(--border);display:flex;gap:6px;}
+.ms-foot-btn{flex:1;border:none;padding:5px;border-radius:5px;font-family:'IBM Plex Sans',sans-serif;font-size:11px;cursor:pointer;font-weight:600;}
+.ms-foot-all{background:var(--surface2);color:var(--text);}
+.ms-foot-none{background:#fdeaea;color:var(--odbijen-dark);}
+
+/* DATE FILTER */
+input[type="date"]{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:6px 10px;border-radius:6px;cursor:pointer;outline:none;}
+input[type="date"]:focus{border-color:var(--navy3);}
+
+/* KPI */
+.kpi-section{padding:16px 24px 0;}
+.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;}
+.kpi-grid{display:grid;grid-template-columns:1.4fr repeat(8,1fr);gap:8px;}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;position:relative;overflow:hidden;}
+.kpi-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;}
+.kpi-total::after{background:linear-gradient(90deg,var(--navy),var(--navy3));}
+.kpi-zaposlen::after{background:var(--zaposlen-mid);}
+.kpi-odbijen::after{background:var(--odbijen-mid);}
+.kpi-odustao::after{background:var(--odustao-mid);}
+.kpi-pojavio::after{background:var(--pojavio-mid);}
+.kpi-feedback::after{background:var(--feedback-mid);}
+.kpi-razmislja::after{background:var(--razmislja-mid);}
+.kpi-uobradi::after{background:var(--uobradi-mid);}
+.kpi-odbijenica::after{background:var(--odbijenica-mid);}
+.kpi-odbijenica .kpi-val{color:var(--odbijenica-dark);}
+.kpi-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px;}
+.kpi-val{font-size:28px;font-weight:700;font-family:'IBM Plex Mono',monospace;line-height:1;}
+.kpi-total .kpi-val{color:var(--navy);}
+.kpi-zaposlen .kpi-val{color:var(--zaposlen-dark);}
+.kpi-odbijen .kpi-val{color:var(--odbijen-dark);}
+.kpi-odustao .kpi-val{color:var(--odustao-dark);}
+.kpi-pojavio .kpi-val{color:var(--pojavio-dark);}
+.kpi-feedback .kpi-val{color:var(--feedback-dark);}
+.kpi-razmislja .kpi-val{color:var(--razmislja-dark);}
+.kpi-uobradi .kpi-val{color:var(--uobradi-dark);}
+.kpi-pct{font-size:11px;color:var(--muted);margin-top:3px;}
+
+/* TABLES */
+.tables-wrap{padding:16px 24px 24px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.tbl-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.tbl-card.wide{grid-column:span 2;}
+.tbl-head{background:var(--navy);color:#fff;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:9px 14px;}
+table{width:100%;border-collapse:collapse;}
+th{padding:7px 10px;text-align:left;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;background:var(--surface2);border-bottom:1px solid var(--border);}
+th.r{text-align:right;}
+td{padding:7px 10px;font-size:12px;border-bottom:1px solid #f0f2f8;}
+td.r{text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+td.pct{text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:#f8f9fd;}
+.row-ukupno td{background:var(--navy)!important;color:#fff!important;font-weight:700;}
+.row-ukupno td.pct{color:rgba(255,255,255,.6)!important;}
+.s-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;}
+</style>
+</head>
+<body>
+
+<div id="drop-zone">
+  <h1>ATS <span style="color:#7aa2e0">Dashboard</span></h1>
+  <p>Prevuci Excel fajl ili klikni da odabereš</p>
+  <div class="drop-box" id="drop-box">
+    <div class="drop-icon">📊</div>
+    <div style="font-size:15px;font-weight:600;margin-bottom:6px">ATS_1_krug_BL.xlsx</div>
+    <div style="font-size:12px;margin-bottom:4px">Prevuci fajl ovdje</div>
+    <div style="font-size:11px;color:#6a84aa">ili</div>
+    <input type="file" id="file-input" accept=".xlsx,.xls">
+    <button class="drop-btn" onclick="document.getElementById('file-input').click()">Odaberi fajl</button>
+  </div>
+</div>
+
+<div id="app">
+  <div class="top-bar">
+    <h1>ATS <span>Dashboard</span> — Pregled 1. kruga selekcije BL</h1>
+    <div class="top-bar-right">
+      <span class="total-chip" id="chip-total">—</span>
+      <button class="reload-btn" onclick="showDrop()">↑ Novi fajl</button>
+    </div>
+  </div>
+
+  <div class="filters" id="filters-bar">
+    <span class="filter-label">Filtriraj:</span>
+    <!-- Filter buttons injected by JS -->
+    <div class="sep"></div>
+    <span class="filter-label">Datum:</span>
+    <input type="date" id="f-datum-od" onchange="applyFilters()">
+    <span style="color:var(--muted);font-size:12px">—</span>
+    <input type="date" id="f-datum-do" onchange="applyFilters()">
+    <div class="sep"></div>
+    <button class="reset-btn" onclick="resetFilters()">✕ Reset</button>
+    <span class="filter-info" id="filter-info"></span>
+  </div>
+
+  <div class="kpi-section">
+    <div class="section-title">Ključni pokazatelji</div>
+    <div class="kpi-grid" id="kpi-grid"></div>
+  </div>
+  <div class="tables-wrap" id="tables-wrap"></div>
+</div>
+
+<script>
+const STATUS_META = {
+  'Zaposlen':     {cls:'zaposlen', short:'Zaposlen'},
+  'Odbijen':      {cls:'odbijen',  short:'Odbijen'},
+  'Odustao':      {cls:'odustao',  short:'Odustao'},
+  'Nije se pojavio na razgovoru':{cls:'pojavio',short:'Nije se pojavio'},
+  'Čeka se feedback':{cls:'feedback',short:'Čeka feedback'},
+  'Razmišlja':    {cls:'razmislja',short:'Razmišlja'},
+  'U obradi (dok/odobrenje)':{cls:'uobradi',short:'U obradi'},
+  'Poslati odbijenicu':{cls:'odbijenica',short:'Poslati odbijenicu'},
+};
+const STATUS_STYLE = {
+  'Zaposlen':'background:var(--zaposlen-light);color:var(--zaposlen-dark)',
+  'Odbijen':'background:var(--odbijen-light);color:var(--odbijen-dark)',
+  'Odustao':'background:var(--odustao-light);color:var(--odustao-dark)',
+  'Nije se pojavio na razgovoru':'background:var(--pojavio-light);color:var(--pojavio-dark)',
+  'Čeka se feedback':'background:var(--feedback-light);color:var(--feedback-dark)',
+  'Razmišlja':'background:var(--razmislja-light);color:var(--razmislja-dark)',
+  'U obradi (dok/odobrenje)':'background:var(--uobradi-light);color:var(--uobradi-dark)',
+  'Poslati odbijenicu':'background:var(--odbijenica-light);color:var(--odbijenica-dark)',
+};
+
+// Filter columns (key = data column name, label = display name)
+const FILTER_COLS = [
+  {key:'Pozicija',     label:'Pozicija'},
+  {key:'Drzava',       label:'Država'},
+  {key:'Grad',         label:'Grad'},
+  {key:'Filijala',     label:'Filijala'},
+  {key:'BL',           label:'BL'},
+  {key:'Mesto prijave',label:'Izvor'},
+  {key:'Vrsta razgovora', label:'Vrsta razgovora'},
+  {key:'Faza selekcije',label:'Faza'},
+  {key:'Status',       label:'Status'},
+  {key:'Razlog',       label:'Razlog'},
+];
+
+let allData=[], filtered=[];
+let selections = {}; // key -> Set of selected values
+
+// ── DROP ──────────────────────────────────────────────────────────────────
+const dropBox=document.getElementById('drop-box');
+const fileInput=document.getElementById('file-input');
+dropBox.addEventListener('dragover',e=>{e.preventDefault();dropBox.classList.add('over');});
+dropBox.addEventListener('dragleave',()=>dropBox.classList.remove('over'));
+dropBox.addEventListener('drop',e=>{e.preventDefault();dropBox.classList.remove('over');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+
+function showDrop(){
+  document.getElementById('drop-zone').classList.remove('hidden');
+  document.getElementById('app').classList.remove('visible');
+}
+
+function loadFile(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const wb=XLSX.read(e.target.result,{type:'array'});
+    const sheetName=wb.SheetNames.find(n=>n.toLowerCase().includes('kandidat'))||wb.SheetNames[0];
+    const ws=wb.Sheets[sheetName];
+    const raw=XLSX.utils.sheet_to_json(ws,{defval:''});
+    allData=raw.map(row=>{
+      const clean={};
+      Object.keys(row).forEach(k=>{
+        const nk=k.replace(/\s+/g,' ').trim();
+        clean[nk]=String(row[k]).trim();
+      });
+      return clean;
+    }).filter(r=>r['Ime i prezime']&&r['Ime i prezime']!=='');
+    // Init selections
+    FILTER_COLS.forEach(f=>selections[f.key]=new Set());
+    filtered=[...allData];
+    buildFilterUI();
+    render();
+    document.getElementById('drop-zone').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── FILTER UI ─────────────────────────────────────────────────────────────
+function unique(data,key){
+  return [...new Set(data.map(r=>r[key]).filter(Boolean))].sort();
+}
+
+function buildFilterUI(){
+  const bar=document.getElementById('filters-bar');
+  // Remove old filter buttons
+  bar.querySelectorAll('.ms-wrap').forEach(el=>el.remove());
+  const sep=bar.querySelector('.sep');
+
+  FILTER_COLS.forEach(f=>{
+    const vals=unique(allData,f.key);
+    if(vals.length===0) return;
+
+    const wrap=document.createElement('div');
+    wrap.className='ms-wrap';
+    wrap.dataset.key=f.key;
+
+    const btn=document.createElement('button');
+    btn.className='ms-btn';
+    btn.innerHTML=`<span class="lbl">${f.label}</span><span class="arrow">▼</span>`;
+    btn.onclick=(e)=>{e.stopPropagation();toggleDropdown(wrap);};
+
+    const dd=document.createElement('div');
+    dd.className='ms-dropdown';
+
+    // Search
+    const srch=document.createElement('div');
+    srch.className='ms-search';
+    srch.innerHTML=`<input type="text" placeholder="Pretraži..." oninput="filterSearch(this,'${f.key}')">`;
+
+    // List
+    const list=document.createElement('div');
+    list.className='ms-list';
+    list.id=`list-${f.key.replace(/\s/g,'-')}`;
+    vals.forEach(v=>{
+      const item=document.createElement('div');
+      item.className='ms-item';
+      item.innerHTML=`<input type="checkbox" id="cb-${f.key}-${v}" value="${v}"><label for="cb-${f.key}-${v}">${v}</label>`;
+      item.querySelector('input').addEventListener('change',()=>onCheckChange(f.key));
+      list.appendChild(item);
+    });
+
+    // Footer
+    const footer=document.createElement('div');
+    footer.className='ms-footer';
+    footer.innerHTML=`<button class="ms-foot-btn ms-foot-all" onclick="selectAll('${f.key}')">Sve</button><button class="ms-foot-btn ms-foot-none" onclick="clearSel('${f.key}')">Ništa</button>`;
+
+    dd.appendChild(srch);
+    dd.appendChild(list);
+    dd.appendChild(footer);
+    wrap.appendChild(btn);
+    wrap.appendChild(dd);
+    bar.insertBefore(wrap,sep);
+  });
+
+  // Close on outside click
+  document.addEventListener('click',()=>{
+    document.querySelectorAll('.ms-dropdown.open').forEach(d=>d.classList.remove('open'));
+  });
+}
+
+function toggleDropdown(wrap){
+  const dd=wrap.querySelector('.ms-dropdown');
+  const isOpen=dd.classList.contains('open');
+  document.querySelectorAll('.ms-dropdown.open').forEach(d=>d.classList.remove('open'));
+  if(!isOpen) dd.classList.add('open');
+}
+
+function filterSearch(input,key){
+  const q=input.value.toLowerCase();
+  const listId=`list-${key.replace(/\s/g,'-')}`;
+  document.getElementById(listId).querySelectorAll('.ms-item').forEach(item=>{
+    const lbl=item.querySelector('label').textContent.toLowerCase();
+    item.style.display=lbl.includes(q)?'':'none';
+  });
+}
+
+function onCheckChange(key){
+  const listId=`list-${key.replace(/\s/g,'-')}`;
+  const checked=new Set();
+  document.getElementById(listId).querySelectorAll('input:checked').forEach(cb=>checked.add(cb.value));
+  selections[key]=checked;
+  updateBtnLabel(key);
+  applyFilters();
+}
+
+function updateBtnLabel(key){
+  const wrap=document.querySelector(`.ms-wrap[data-key="${key}"]`);
+  if(!wrap) return;
+  const btn=wrap.querySelector('.ms-btn');
+  const col=FILTER_COLS.find(f=>f.key===key);
+  const cnt=selections[key].size;
+  if(cnt>0){
+    btn.classList.add('active');
+    btn.innerHTML=`<span class="lbl">${col.label}</span><span class="count">${cnt}</span><span class="arrow">▼</span>`;
+  } else {
+    btn.classList.remove('active');
+    btn.innerHTML=`<span class="lbl">${col.label}</span><span class="arrow">▼</span>`;
+  }
+}
+
+function selectAll(key){
+  const listId=`list-${key.replace(/\s/g,'-')}`;
+  document.getElementById(listId).querySelectorAll('input[type=checkbox]').forEach(cb=>{cb.checked=true;});
+  onCheckChange(key);
+}
+
+function clearSel(key){
+  const listId=`list-${key.replace(/\s/g,'-')}`;
+  document.getElementById(listId).querySelectorAll('input[type=checkbox]').forEach(cb=>{cb.checked=false;});
+  onCheckChange(key);
+}
+
+function applyFilters(){
+  filtered=allData.filter(r=>{
+    for(const f of FILTER_COLS){
+      if(selections[f.key] && selections[f.key].size>0){
+        if(!selections[f.key].has(r[f.key])) return false;
+      }
+    }
+    return true;
+  });
+
+  // Date filter
+  const od=document.getElementById('f-datum-od').value;
+  const doo=document.getElementById('f-datum-do').value;
+  if(od||doo){
+    filtered=filtered.filter(r=>{
+      const raw=r['Datum prosleđivanja BL-u']||'';
+      if(!raw) return false;
+      let d;
+      if(!isNaN(raw)){
+        d=new Date((parseFloat(raw)-25569)*86400*1000).toISOString().split('T')[0];
+      } else {
+        const p=new Date(raw);
+        if(!isNaN(p)) d=p.toISOString().split('T')[0];
+        else return true;
+      }
+      if(od&&d<od) return false;
+      if(doo&&d>doo) return false;
+      return true;
+    });
+  }
+
+  const active=FILTER_COLS.filter(f=>selections[f.key]&&selections[f.key].size>0).length
+    +(od?1:0)+(doo?1:0);
+  document.getElementById('filter-info').textContent=active>0?`${active} filtera aktivno`:'';
+  render();
+}
+
+function resetFilters(){
+  FILTER_COLS.forEach(f=>{
+    selections[f.key]=new Set();
+    updateBtnLabel(f.key);
+    const listId=`list-${f.key.replace(/\s/g,'-')}`;
+    const el=document.getElementById(listId);
+    if(el) el.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.checked=false);
+  });
+  document.getElementById('f-datum-od').value='';
+  document.getElementById('f-datum-do').value='';
+  filtered=[...allData];
+  document.getElementById('filter-info').textContent='';
+  render();
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────
+function countBy(data,fn){
+  const m={};
+  data.forEach(r=>{const v=fn(r);if(v)m[v]=(m[v]||0)+1;});
+  return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+}
+function pct(n,t){return t?Math.round(n/t*100)+'%':'0%';}
+
+function render(){
+  const total=filtered.length;
+  document.getElementById('chip-total').textContent=`${total} kandidata`;
+
+  // KPI — Ukupno + statusi
+  const statusi=Object.keys(STATUS_META);
+  let kpi=`<div class="kpi-card kpi-total"><div class="kpi-lbl">Ukupno</div><div class="kpi-val">${total}</div><div class="kpi-pct">kandidata</div></div>`;
+  statusi.forEach(s=>{
+    const m=STATUS_META[s];
+    const cnt=filtered.filter(r=>r['Status']===s).length;
+    kpi+=`<div class="kpi-card kpi-${m.cls}"><div class="kpi-lbl">${m.short}</div><div class="kpi-val">${cnt}</div><div class="kpi-pct">${pct(cnt,total)}</div></div>`;
+  });
+  document.getElementById('kpi-grid').innerHTML=kpi;
+
+  function tbl(title,rows,cls=''){
+    const hdrs=rows[0];
+    const data=rows.slice(1);
+    let th='<tr>';
+    hdrs.forEach(h=>{
+      if(h.startsWith('r:'))th+=`<th class="r">${h.slice(2)}</th>`;
+      else if(h.startsWith('p:'))th+=`<th class="r">${h.slice(2)}</th>`;
+      else th+=`<th>${h}</th>`;
+    });
+    th+='</tr>';
+    let tb='';
+    data.forEach(row=>{
+      const isU=row[0]==='__u__';
+      tb+=`<tr class="${isU?'row-ukupno':''}">`;
+      row.forEach((cell,i)=>{
+        const h=hdrs[i];
+        tb+=`<td class="${h.startsWith('p:')?'pct':h.startsWith('r:')?'r':''}">${isU&&i===0?'UKUPNO':cell}</td>`;
+      });
+      tb+='</tr>';
+    });
+    return `<div class="tbl-card ${cls}"><div class="tbl-head">${title}</div><table><thead>${th}</thead><tbody>${tb}</tbody></table></div>`;
+  }
+
+  let html='';
+
+  html+=tbl('STATUS',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Status']).map(([v,c])=>[`<span class="s-badge" style="${STATUS_STYLE[v]||''}">${v}</span>`,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  html+=tbl('DRŽAVA',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Drzava']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  html+=tbl('BL',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['BL']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  html+=tbl('POZICIJA',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Pozicija']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  html+=tbl('GRAD',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Grad']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ],'wide');
+
+  html+=tbl('FILIJALA',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Filijala']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ],'wide');
+
+  html+=tbl('IZVOR PRIJAVE',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Mesto prijave']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  html+=tbl('VRSTA RAZGOVORA',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Vrsta razgovora']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  html+=tbl('FAZA SELEKCIJE',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Faza selekcije']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ]);
+
+  html+=tbl('RAZLOG',[
+    ['Kategorija','r:Broj','p:%'],
+    ...countBy(filtered,r=>r['Razlog']).map(([v,c])=>[v,c,pct(c,total)]),
+    ['__u__',total,'100%']
+  ],'wide');
+
+  // Candidates list
+  let chtml=`<div class="tbl-card" style="grid-column:span 4">
+    <div class="tbl-head">KANDIDATI (${total})</div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Ime i prezime</th><th>Pozicija</th><th>Država</th><th>Grad</th>
+        <th>Filijala</th><th>BL</th><th>Izvor</th><th>Status</th><th>Razlog</th>
+      </tr></thead><tbody>`;
+  filtered.forEach((r,i)=>{
+    const s=r['Status']||'';
+    chtml+=`<tr>
+      <td style="color:var(--muted);font-family:'IBM Plex Mono',monospace">${i+1}</td>
+      <td><strong>${r['Ime i prezime']||''}</strong></td>
+      <td>${r['Pozicija']||''}</td>
+      <td>${r['Drzava']||''}</td>
+      <td>${r['Grad']||''}</td>
+      <td>${r['Filijala']||''}</td>
+      <td>${r['BL']||''}</td>
+      <td>${r['Mesto prijave']||''}</td>
+      <td><span class="s-badge" style="${STATUS_STYLE[s]||''}">${s}</span></td>
+      <td style="color:var(--muted);font-size:11px">${r['Razlog']||''}</td>
+    </tr>`;
+  });
+  chtml+=`</tbody></table></div>`;
+  html+=chtml;
+
+  document.getElementById('tables-wrap').innerHTML=html;
+}
+</script>
+</body>
+</html>
