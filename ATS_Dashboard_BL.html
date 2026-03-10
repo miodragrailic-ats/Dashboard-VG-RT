@@ -213,7 +213,7 @@ const FILTER_COLS = [
   {key:'Grad',         label:'Grad'},
   {key:'Filijala',     label:'Filijala'},
   {key:'BL',           label:'BL'},
-  {key:'Mesto prijave',label:'Izvor'},
+  {key:'Mesto prijave',label:'Mesto prijave'},
   {key:'Vrsta razgovora', label:'Vrsta razgovora'},
   {key:'Faza selekcije',label:'Faza'},
   {key:'Status',       label:'Status'},
@@ -512,7 +512,7 @@ function render(){
     ['__u__',total,'100%']
   ],'wide');
 
-  html+=tbl('IZVOR PRIJAVE',[
+  html+=tbl('MESTO PRIJAVE',[
     ['Kategorija','r:Broj','p:%'],
     ...countBy(filtered,r=>r['Mesto prijave']).map(([v,c])=>[v,c,pct(c,total)]),
     ['__u__',total,'100%']
@@ -542,7 +542,7 @@ function render(){
     <table>
       <thead><tr>
         <th>#</th><th>Ime i prezime</th><th>Pozicija</th><th>Država</th><th>Grad</th>
-        <th>Filijala</th><th>BL</th><th>Izvor</th><th>Status</th><th>Razlog</th>
+        <th>Filijala</th><th>BL</th><th>Mesto prijave</th><th>Status</th><th>Razlog</th>
       </tr></thead><tbody>`;
   filtered.forEach((r,i)=>{
     const s=r['Status']||'';
