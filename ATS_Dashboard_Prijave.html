@@ -15,6 +15,8 @@
   --kontakt-dark:#0c4a6e;    --kontakt-light:#e0f2fe;   --kontakt-mid:#0284c7;
   --konv1-dark:#7a3200;      --konv1-light:#fef0e6;     --konv1-mid:#e07020;
   --konv2-dark:#4a1060;      --konv2-light:#f5eafb;     --konv2-mid:#9333ea;
+  --konv3-dark:#065f46;      --konv3-light:#d1fae5;     --konv3-mid:#059669;
+  --zak-dark:#854d0e;        --zak-light:#fef9c3;       --zak-mid:#ca8a04;
   --infostud-dark:#1a5c2a;   --infostud-light:#e8f5ec;  --infostud-mid:#2e9e4f;
   --nyjp-dark:#0c4a6e;       --nyjp-light:#e0f2fe;      --nyjp-mid:#0284c7;
   --mojposao-dark:#7c2d12;   --mojposao-light:#ffedd5;  --mojposao-mid:#ea580c;
@@ -70,14 +72,16 @@ input[type="date"]:focus{border-color:var(--navy3);}
 .ms-foot-none{background:#fdeaea;color:#8b0000;}
 .kpi-section{padding:16px 24px 0;}
 .section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:10px;}
-.kpi-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:8px;}
+.kpi-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;}
 .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;position:relative;overflow:hidden;}
 .kpi-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;}
 .kpi-prijave::after{background:var(--prijave-mid);}
 .kpi-prosl::after{background:var(--prosl-mid);}
+.kpi-zak::after{background:var(--zak-mid);}
 .kpi-kontakt::after{background:var(--kontakt-mid);}
 .kpi-konv1::after{background:var(--konv1-mid);}
 .kpi-konv2::after{background:var(--konv2-mid);}
+.kpi-konv3::after{background:var(--konv3-mid);}
 .kpi-infostud::after{background:var(--infostud-mid);}
 .kpi-nyjp::after{background:var(--nyjp-mid);}
 .kpi-mojposao::after{background:var(--mojposao-mid);}
@@ -86,9 +90,11 @@ input[type="date"]:focus{border-color:var(--navy3);}
 .kpi-val{font-size:24px;font-weight:700;font-family:'IBM Plex Mono',monospace;line-height:1;}
 .kpi-prijave .kpi-val{color:var(--prijave-dark);}
 .kpi-prosl .kpi-val{color:var(--prosl-dark);}
+.kpi-zak .kpi-val{color:var(--zak-dark);}
 .kpi-kontakt .kpi-val{color:var(--kontakt-dark);}
 .kpi-konv1 .kpi-val{color:var(--konv1-dark);}
 .kpi-konv2 .kpi-val{color:var(--konv2-dark);}
+.kpi-konv3 .kpi-val{color:var(--konv3-dark);}
 .kpi-infostud .kpi-val{color:var(--infostud-dark);}
 .kpi-nyjp .kpi-val{color:var(--nyjp-dark);}
 .kpi-mojposao .kpi-val{color:var(--mojposao-dark);}
@@ -288,29 +294,33 @@ function resetFilters(){
 }
 
 function sumByKey(data,keyFn){
-  const p={},pr={},k={};
+  const p={},pr={},z={},k={};
   data.forEach(r=>{
     const v=keyFn(r);if(!v)return;
     p[v]=(p[v]||0)+(parseFloat(r['Broj prijava'])||0);
-    pr[v]=(pr[v]||0)+(parseFloat(r['Broj prosledjenih prijava'])||0);
+    pr[v]=(pr[v]||0)+(parseFloat(r['Broj prosledjenih - BL 1.krug'])||0);
+    z[v]=(z[v]||0)+(parseFloat(r['Broj zakazanih - RT 1.krug'])||0);
     k[v]=(k[v]||0)+(parseFloat(r['Broj telefonski kontaktiranih'])||0);
   });
-  return Object.keys(p).sort((a,b)=>p[b]-p[a]).map(v=>({v,p:p[v],pr:pr[v],k:k[v]}));
+  return Object.keys(p).sort((a,b)=>p[b]-p[a]).map(v=>({v,p:p[v],pr:pr[v],z:z[v],k:k[v]}));
 }
 
 function render(){
   const totalP=sumCol(filtered,'Broj prijava');
-  const totalPr=sumCol(filtered,'Broj prosledjenih prijava');
+  const totalPr=sumCol(filtered,'Broj prosledjenih - BL 1.krug');
+  const totalZ=sumCol(filtered,'Broj zakazanih - RT 1.krug');
   const totalK=sumCol(filtered,'Broj telefonski kontaktiranih');
   document.getElementById('chip-total').textContent=`${Math.round(totalP)} prijava`;
 
   // KPI
   let kpi='';
   kpi+=`<div class="kpi-card kpi-prijave"><div class="kpi-lbl">Ukupno prijava</div><div class="kpi-val">${Math.round(totalP)}</div></div>`;
-  kpi+=`<div class="kpi-card kpi-prosl"><div class="kpi-lbl">Prosleđene</div><div class="kpi-val">${Math.round(totalPr)}</div><div class="kpi-pct">${konv(totalPr,totalP)} od prijava</div></div>`;
+  kpi+=`<div class="kpi-card kpi-prosl"><div class="kpi-lbl">Prosleđeni BL</div><div class="kpi-val">${Math.round(totalPr)}</div><div class="kpi-pct">${konv(totalPr,totalP)} od prijava</div></div>`;
+  kpi+=`<div class="kpi-card kpi-zak"><div class="kpi-lbl">Zakazani RT</div><div class="kpi-val">${Math.round(totalZ)}</div><div class="kpi-pct">${konv(totalZ,totalP)} od prijava</div></div>`;
   kpi+=`<div class="kpi-card kpi-kontakt"><div class="kpi-lbl">Kontaktirani</div><div class="kpi-val">${Math.round(totalK)}</div><div class="kpi-pct">${konv(totalK,totalP)} od prijava</div></div>`;
-  kpi+=`<div class="kpi-card kpi-konv1"><div class="kpi-lbl">Konv. Prijave→Prosl.</div><div class="kpi-val">${konv(totalPr,totalP)}</div></div>`;
-  kpi+=`<div class="kpi-card kpi-konv2"><div class="kpi-lbl">Konv. Prosl.→Kontakt.</div><div class="kpi-val">${konv(totalK,totalPr)}</div></div>`;
+  kpi+=`<div class="kpi-card kpi-konv1"><div class="kpi-lbl">Konv. P→BL</div><div class="kpi-val">${konv(totalPr,totalP)}</div></div>`;
+  kpi+=`<div class="kpi-card kpi-konv2"><div class="kpi-lbl">Konv. P→RT</div><div class="kpi-val">${konv(totalZ,totalP)}</div></div>`;
+  kpi+=`<div class="kpi-card kpi-konv3"><div class="kpi-lbl">Konv. P→Kont.</div><div class="kpi-val">${konv(totalK,totalP)}</div></div>`;
   Object.keys(MESTO_META).forEach(m=>{
     const meta=MESTO_META[m];
     const rows=filtered.filter(r=>r['Mesto prijave']===m);
@@ -320,7 +330,7 @@ function render(){
   document.getElementById('kpi-grid').innerHTML=kpi;
 
   function tblFunnel(title,rows,cls=''){
-    let th=`<tr><th>Kategorija</th><th class="r">Prijave</th><th class="r">Prosleđene</th><th class="r">Kontaktirani</th><th class="r">Konv. P→Pr</th><th class="r">Konv. Pr→K</th></tr>`;
+    let th=`<tr><th>Kategorija</th><th class="r">Prijave</th><th class="r">Prosl. BL</th><th class="r">Zak. RT</th><th class="r">Kontakt.</th><th class="r">P→BL</th><th class="r">P→RT</th><th class="r">P→Kont.</th></tr>`;
     let tb='';
     rows.forEach(row=>{
       const isU=row.v==='__u__';
@@ -328,15 +338,17 @@ function render(){
         <td>${isU?'UKUPNO':row.v}</td>
         <td class="r">${Math.round(row.p)}</td>
         <td class="r">${Math.round(row.pr)}</td>
+        <td class="r">${Math.round(row.z)}</td>
         <td class="r">${Math.round(row.k)}</td>
         <td class="pct">${konv(row.pr,row.p)}</td>
-        <td class="pct">${konv(row.k,row.pr)}</td>
+        <td class="pct">${konv(row.z,row.p)}</td>
+        <td class="pct">${konv(row.k,row.p)}</td>
       </tr>`;
     });
     return `<div class="tbl-card ${cls}"><div class="tbl-head">${title}</div><table><thead>${th}</thead><tbody>${tb}</tbody></table></div>`;
   }
 
-  const mkUkupno=(arr)=>[...arr,{v:'__u__',p:arr.reduce((s,r)=>s+r.p,0),pr:arr.reduce((s,r)=>s+r.pr,0),k:arr.reduce((s,r)=>s+r.k,0)}];
+  const mkUkupno=(arr)=>[...arr,{v:'__u__',p:arr.reduce((s,r)=>s+r.p,0),pr:arr.reduce((s,r)=>s+r.pr,0),z:arr.reduce((s,r)=>s+r.z,0),k:arr.reduce((s,r)=>s+r.k,0)}];
 
   let html='';
   html+=tblFunnel('MESTO PRIJAVE',mkUkupno(sumByKey(filtered,r=>r['Mesto prijave'])));
