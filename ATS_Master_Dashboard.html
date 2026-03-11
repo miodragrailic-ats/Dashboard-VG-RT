@@ -151,7 +151,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
   <div class="header-title">ATS <span>Master</span> Dashboard</div>
   <div class="header-meta">
     <span class="badge" id="hdr-badge">0 kandidata</span>
-    <button class="upload-btn" onclick="showDrop()">↑ Novi fajlovi</button>
+    <button type="button" class="upload-btn" onclick="showDrop()">↑ Novi fajlovi</button>
   </div>
 </div>
 
@@ -178,7 +178,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
       <input type="file" id="inp-bl" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="loadFile('bl',this)">
     </div>
   </div>
-  <button class="drop-start" id="btn-start" onclick="startDashboard()">Prikaži dashboard →</button>
+  <button type="button" class="drop-start" id="btn-start" onclick="startDashboard()">Prikaži dashboard →</button>
 </div>
 
 <!-- APP -->
@@ -186,13 +186,14 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
   <!-- FILTERS -->
   <div class="filters" id="filters-bar">
     <span class="filter-label">Filtriraj:</span>
+    <div id="filter-btns" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex:1;"></div>
     <div class="sep"></div>
     <span class="filter-label">Datum:</span>
     <input type="date" class="date-input" id="f-od" onchange="applyFilters()">
     <span style="color:var(--muted);font-size:12px">—</span>
     <input type="date" class="date-input" id="f-do" onchange="applyFilters()">
     <div class="sep"></div>
-    <button class="reset-btn" onclick="resetFilters()">✕ Reset</button>
+    <button type="button" class="reset-btn" onclick="resetFilters()">✕ Reset</button>
     <span class="filter-info" id="filter-info"></span>
   </div>
 
@@ -207,7 +208,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
     <div class="tables-grid" id="tables-row2"></div>
 
     <!-- CANDIDATES -->
-    <div class="section-title">Lista kandidata (RT + BL)</div>
+    <div class="section-title" id="cand-section-title">Lista kandidata (RT + BL)</div>
     <div class="cand-wrap">
       <div class="cand-hdr">
         <span class="cand-title">Kandidati</span>
@@ -249,6 +250,11 @@ const FILTER_COLS=[
   {key:'Razlog',label:'Razlog'},
 ];
 
+// Special filter states
+let selProsledjeni=new Set(); // 'BL' | 'RT 2.krug'
+let selRTRazgovori=new Set(); // '1. krug' | '2. krug'
+let selKontaktirani=false;
+
 const STATUS_COLORS={
   'Zaposlen':'--zaposlen','Odbijen':'--odbijen','Odustao':'--odustao',
   'Nije se pojavio na razgovoru':'--pojavio','Čeka se feedback':'--ceka',
@@ -260,24 +266,44 @@ const STATUS_COLORS={
 // ── FILE LOADING ──────────────────────────────────────────────────────────────
 function loadFile(type, input){
   const file=input.files[0]; if(!file) return;
+  const box=document.getElementById(`box-${type}`);
+  const lbl=document.getElementById(`lbl-${type}`);
+  lbl.textContent='Učitavanje...';
+  box.classList.remove('loaded');
+
   const reader=new FileReader();
+  reader.onerror=()=>{lbl.textContent='Greška pri čitanju!';};
   reader.onload=e=>{
-    const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const raw=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
-    const clean=raw.map(row=>{
-      const r={};
-      Object.keys(row).forEach(k=>r[k.replace(/\s+/g,' ').trim()]=String(row[k]).trim());
-      return r;
-    });
-    if(type==='prijave'){rawPrijave=clean.filter(r=>r['ID Prijave']);}
-    else if(type==='rt'){rawRT=clean.filter(r=>r['Ime i prezime']);}
-    else if(type==='bl'){rawBL=clean.filter(r=>r['Ime i prezime']);}
-    loaded[type]=true;
-    document.getElementById(`box-${type}`).classList.add('loaded');
-    document.getElementById(`lbl-${type}`).textContent=file.name;
-    if(loaded.prijave||loaded.rt||loaded.bl){
-      document.getElementById('btn-start').classList.add('ready');
+    try{
+      // Try with cellDates first, fallback without
+      let wb;
+      try{wb=XLSX.read(e.target.result,{type:'array',cellDates:true,cellNF:false,sheetStubs:true});}
+      catch(e2){wb=XLSX.read(e.target.result,{type:'array'});}
+
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const raw=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
+      const clean=raw.map(row=>{
+        const r={};
+        Object.keys(row).forEach(k=>{
+          const cleanKey=k.replace(/[\r\n]+/g,' ').replace(/\s+/g,' ').trim();
+          r[cleanKey]=String(row[k]).trim();
+        });
+        return r;
+      });
+
+      if(type==='prijave'){rawPrijave=clean.filter(r=>r['ID Prijave']||r['ID prijave']);}
+      else if(type==='rt'){rawRT=clean.filter(r=>(r['Ime i prezime']||'').trim()!==''&&r['Ime i prezime']!=='0');}
+      else if(type==='bl'){rawBL=clean.filter(r=>(r['Ime i prezime']||'').trim()!==''&&r['Ime i prezime']!=='0');}
+
+      loaded[type]=true;
+      box.classList.add('loaded');
+      lbl.textContent=file.name+` (${clean.length} redova)`;
+      if(loaded.prijave||loaded.rt||loaded.bl){
+        document.getElementById('btn-start').classList.add('ready');
+      }
+    }catch(err){
+      lbl.textContent='Greška: '+err.message;
+      console.error('loadFile error',type,err);
     }
   };
   reader.readAsArrayBuffer(file);
@@ -286,9 +312,17 @@ function loadFile(type, input){
 function showDrop(){
   document.getElementById('drop-zone').classList.remove('hidden');
   document.getElementById('app').style.display='none';
+  // Reset loaded state
+  loaded={prijave:false,rt:false,bl:false};
+  ['prijave','rt','bl'].forEach(t=>{
+    document.getElementById(`box-${t}`).classList.remove('loaded');
+    document.getElementById(`lbl-${t}`).textContent=t==='prijave'?'Prijave':t==='rt'?'RT Razgovori':'BL Razgovori';
+  });
+  document.getElementById('btn-start').classList.remove('ready');
 }
 
 function startDashboard(){
+  try{
   // Merge RT and BL into unified candidate list
   allCands=[];
   rawRT.forEach(r=>{
@@ -336,25 +370,29 @@ function startDashboard(){
   render();
   document.getElementById('drop-zone').classList.add('hidden');
   document.getElementById('app').style.display='block';
+  }catch(err){
+    alert('Greška pri pokretanju dashboarda: '+err.message);
+    console.error(err);
+  }
 }
 
 // ── FILTERS ──────────────────────────────────────────────────────────────────
 function unique(data,key){return[...new Set(data.map(r=>r[key]).filter(Boolean))].sort();}
 
 function buildFilterUI(){
-  const bar=document.getElementById('filters-bar');
-  bar.querySelectorAll('.ms-wrap').forEach(el=>el.remove());
-  const firstSep=bar.querySelector('.sep');
+  const container=document.getElementById('filter-btns');
+  container.innerHTML='';
+
   FILTER_COLS.forEach(f=>{
     const vals=unique(allCands,f.key);
     if(!vals.length)return;
     const wrap=document.createElement('div');wrap.className='ms-wrap';wrap.dataset.key=f.key;
-    const btn=document.createElement('button');btn.className='ms-btn';
+    const btn=document.createElement('button');btn.className='ms-btn';btn.type='button';
     btn.innerHTML=`<span class="lbl">${f.label}</span><span class="arrow">▼</span>`;
     btn.onclick=e=>{e.stopPropagation();toggleDD(wrap);};
     const dd=document.createElement('div');dd.className='ms-dropdown';
     const listId=`list-${f.key.replace(/\s/g,'-')}`;
-    dd.innerHTML=`<div class="ms-search"><input type="text" placeholder="Pretraži..." oninput="fsearch(this,'${listId}')"></div><div class="ms-list" id="${listId}"></div><div class="ms-footer"><button class="ms-foot-btn" onclick="selAll('${f.key}','${listId}')">Sve</button><button class="ms-foot-btn" onclick="selNone('${f.key}','${listId}')">Ništa</button></div>`;
+    dd.innerHTML=`<div class="ms-search"><input type="text" placeholder="Pretraži..." oninput="fsearch(this,'${listId}')"></div><div class="ms-list" id="${listId}"></div><div class="ms-footer"><button type="button" class="ms-foot-btn" onclick="selAll('${f.key}','${listId}')">Sve</button><button type="button" class="ms-foot-btn" onclick="selNone('${f.key}','${listId}')">Ništa</button></div>`;
     const list=dd.querySelector(`#${listId}`);
     vals.forEach(v=>{
       const item=document.createElement('div');item.className='ms-item';
@@ -364,10 +402,69 @@ function buildFilterUI(){
       list.appendChild(item);
     });
     wrap.appendChild(btn);wrap.appendChild(dd);
-    bar.insertBefore(wrap,firstSep);
+    container.appendChild(wrap);
   });
-  document.addEventListener('click',()=>document.querySelectorAll('.ms-dropdown.open').forEach(d=>d.classList.remove('open')));
+
+  // ── Special filter: Prosleđeni ──
+  buildSpecialFilter(container, 'prosledjeni', 'Prosleđeni', ['BL (1.krug)','RT (2.krug)'], v=>{
+    selProsledjeni=v; applyFilters();
+  });
+
+  // ── Special filter: RT Razgovori ──
+  buildSpecialFilter(container, 'rtrazgovori', 'RT Razgovori', ['1. krug','2. krug'], v=>{
+    selRTRazgovori=v; applyFilters();
+  });
+
+  // ── Special filter: Kontaktirani (toggle button) ──
+  const kwrap=document.createElement('div');kwrap.className='ms-wrap';kwrap.dataset.key='kontaktirani';
+  const kbtn=document.createElement('button');kbtn.className='ms-btn';kbtn.type='button';kbtn.id='btn-kontaktirani';
+  kbtn.innerHTML=`<span class="lbl">Kontaktirani</span>`;
+  kbtn.onclick=e=>{
+    e.stopPropagation();
+    selKontaktirani=!selKontaktirani;
+    kbtn.classList.toggle('active',selKontaktirani);
+    applyFilters();
+  };
+  kwrap.appendChild(kbtn);
+  container.appendChild(kwrap);
+
+  // listener se dodaje jednom pri startu (dole u init)
 }
+
+function closeAllDropdowns(){
+  document.querySelectorAll('.ms-dropdown.open').forEach(d=>d.classList.remove('open'));
+}
+
+function buildSpecialFilter(container, id, label, options, onChange){
+  const wrap=document.createElement('div');wrap.className='ms-wrap';wrap.dataset.key=id;
+  const btn=document.createElement('button');btn.className='ms-btn';btn.type='button';btn.id=`btn-${id}`;
+  btn.innerHTML=`<span class="lbl">${label}</span><span class="arrow">▼</span>`;
+  btn.onclick=e=>{e.stopPropagation();toggleDD(wrap);};
+  const dd=document.createElement('div');dd.className='ms-dropdown';
+  const listId=`list-${id}`;
+  dd.innerHTML=`<div class="ms-list" id="${listId}"></div><div class="ms-footer"><button type="button" class="ms-foot-btn" onclick="spSelAll('${id}')">Sve</button><button type="button" class="ms-foot-btn" onclick="spSelNone('${id}')">Ništa</button></div>`;
+  const list=dd.querySelector(`#${listId}`);
+  options.forEach(v=>{
+    const item=document.createElement('div');item.className='ms-item';
+    const cbId=`cb-${id}-${v}`.replace(/[\s\/\.\(\)]/g,'-');
+    item.innerHTML=`<input type="checkbox" id="${cbId}" value="${v}"><label for="${cbId}">${v}</label>`;
+    item.querySelector('input').addEventListener('change',()=>{
+      const checked=new Set();
+      document.getElementById(listId).querySelectorAll('input:checked').forEach(cb=>checked.add(cb.value));
+      onChange(checked);
+      const cnt=checked.size;
+      const b=document.getElementById(`btn-${id}`);
+      b.classList.toggle('active',cnt>0);
+      b.innerHTML=cnt>0?`<span class="lbl">${label}</span><span class="count">${cnt}</span><span class="arrow">▼</span>`:`<span class="lbl">${label}</span><span class="arrow">▼</span>`;
+    });
+    list.appendChild(item);
+  });
+  wrap.appendChild(btn);wrap.appendChild(dd);
+  container.appendChild(wrap);
+}
+
+function spSelAll(id){document.getElementById(`list-${id}`).querySelectorAll('input').forEach(cb=>{cb.checked=true;cb.dispatchEvent(new Event('change'));});}
+function spSelNone(id){document.getElementById(`list-${id}`).querySelectorAll('input').forEach(cb=>{cb.checked=false;cb.dispatchEvent(new Event('change'));});}
 
 function toggleDD(wrap){
   const dd=wrap.querySelector('.ms-dropdown');
@@ -387,7 +484,7 @@ function onCheck(key,listId){
   selections[key]=checked;updateBtn(key);applyFilters();
 }
 function updateBtn(key){
-  const wrap=document.querySelector(`.ms-wrap[data-key="${key}"]`);if(!wrap)return;
+  const wrap=document.querySelector(`#filter-btns .ms-wrap[data-key="${key}"]`);if(!wrap)return;
   const btn=wrap.querySelector('.ms-btn');
   const col=FILTER_COLS.find(f=>f.key===key);
   const cnt=selections[key].size;
@@ -399,12 +496,24 @@ function selNone(key,listId){document.getElementById(listId).querySelectorAll('i
 
 function applyFilters(){
   filtered=allCands.filter(r=>{
+    // Standard filters
     for(const f of FILTER_COLS){
       if(selections[f.key]&&selections[f.key].size>0&&!selections[f.key].has(r[f.key]))return false;
     }
+    // Prosleđeni filter
+    if(selProsledjeni.size>0){
+      const matchBL=selProsledjeni.has('BL (1.krug)')&&r.tabela==='BL';
+      const matchRT2=selProsledjeni.has('RT (2.krug)')&&r.tabela==='RT'&&r.Faza==='2. krug';
+      if(!matchBL&&!matchRT2)return false;
+    }
+    // RT Razgovori filter
+    if(selRTRazgovori.size>0){
+      if(r.tabela!=='RT')return false;
+      if(!selRTRazgovori.has(r.Faza))return false;
+    }
     return true;
   });
-  // Date filter on datum
+  // Date filter
   const od=document.getElementById('f-od').value;
   const doo=document.getElementById('f-do').value;
   if(od||doo){
@@ -415,7 +524,9 @@ function applyFilters(){
       if(od&&d<od)return false;if(doo&&d>doo)return false;return true;
     });
   }
-  const active=FILTER_COLS.filter(f=>selections[f.key]&&selections[f.key].size>0).length+(od?1:0)+(doo?1:0);
+  const active=FILTER_COLS.filter(f=>selections[f.key]&&selections[f.key].size>0).length
+    +(selProsledjeni.size>0?1:0)+(selRTRazgovori.size>0?1:0)+(selKontaktirani?1:0)
+    +(od?1:0)+(doo?1:0);
   document.getElementById('filter-info').textContent=active>0?`${active} filtera aktivno`:'';
   render();
 }
@@ -426,6 +537,16 @@ function resetFilters(){
     const el=document.getElementById(`list-${f.key.replace(/\s/g,'-')}`);
     if(el)el.querySelectorAll('input').forEach(cb=>cb.checked=false);
   });
+  // Reset special filters
+  selProsledjeni=new Set();selRTRazgovori=new Set();selKontaktirani=false;
+  ['prosledjeni','rtrazgovori'].forEach(id=>{
+    const el=document.getElementById(`list-${id}`);
+    if(el)el.querySelectorAll('input').forEach(cb=>cb.checked=false);
+    const btn=document.getElementById(`btn-${id}`);
+    if(btn){btn.classList.remove('active');btn.innerHTML=`<span class="lbl">${id==='prosledjeni'?'Prosleđeni':'RT Razgovori'}</span><span class="arrow">▼</span>`;}
+  });
+  const kb=document.getElementById('btn-kontaktirani');
+  if(kb){kb.classList.remove('active');kb.innerHTML=`<span class="lbl">Kontaktirani</span>`;}
   document.getElementById('f-od').value='';document.getElementById('f-do').value='';
   filtered=[...allCands];document.getElementById('filter-info').textContent='';render();
 }
@@ -434,8 +555,12 @@ function resetFilters(){
 function render(){
   renderKPI();
   renderTables();
-  renderCandidates();
+  if(!selKontaktirani) renderCandidates();
   document.getElementById('hdr-badge').textContent=`${filtered.length} kandidata`;
+  const candWrap=document.querySelector('.cand-wrap');
+  const candTitle=document.getElementById('cand-section-title');
+  if(candWrap) candWrap.style.display=selKontaktirani?'none':'block';
+  if(candTitle) candTitle.style.display=selKontaktirani?'none':'block';
 }
 
 function countStatus(status){
@@ -447,8 +572,21 @@ function cntFaza(status,faza){return filtered.filter(r=>r.Status===status&&r.Faz
 function subRT_BL(status){const rt=cntST(status,'RT'),bl=cntST(status,'BL');return`<div class="kpi-bl-sub"><span>${rt}</span> RT · <span>${bl}</span> BL</div>`;}
 
 function renderKPI(){
+  // Apply date filter to rawPrijave
+  const od=document.getElementById('f-od').value;
+  const doo=document.getElementById('f-do').value;
+  const filteredPrijave=rawPrijave.filter(r=>{
+    if(!od&&!doo)return true;
+    const raw=r['Datum pregleda prijave']||'';if(!raw)return true;
+    const p=new Date(raw);if(isNaN(p))return true;
+    const d=p.toISOString().split('T')[0];
+    if(od&&d<od)return false;
+    if(doo&&d>doo)return false;
+    return true;
+  });
+
   let totalPrijave=0,totalKontakt=0;
-  rawPrijave.forEach(r=>{
+  filteredPrijave.forEach(r=>{
     totalPrijave+=parseFloat(r['Broj prijava']||0);
     totalKontakt+=parseFloat(r['Broj telefonski kontaktiranih']||0);
   });
@@ -459,10 +597,17 @@ function renderKPI(){
   const bl2krug=filtered.filter(r=>r.tabela==='RT'&&r.Faza==='2. krug').length;
   const total=filtered.length;
 
+  const rtK1=filtered.filter(r=>r.tabela==='RT'&&r.Faza==='1. krug').length;
+  const rtK2=filtered.filter(r=>r.tabela==='RT'&&r.Faza==='2. krug').length;
+
+  // Kontaktirani from rawPrijave (aggregated, not filtered by candidate filters)
+  let totalZakazaniPrijave=0;
+  filteredPrijave.forEach(r=>{totalZakazaniPrijave+=parseFloat(r['Broj zakazanih - RT 1.krug']||0);});
+
   const cards=[
     {cls:'c-prijave',lbl:'Prijave',val:Math.round(totalPrijave),src:'Prijave tabela',pct:'',sub:''},
-    {cls:'c-kontakt',lbl:'Kontaktirani',val:Math.round(totalKontakt),src:'Prijave tabela',pct:totalPrijave>0?pct(totalKontakt,totalPrijave)+' od prijava':'',sub:''},
-    {cls:'c-rt',lbl:'RT Razgovori',val:totalRT,src:'RT tabela',pct:'',sub:''},
+    {cls:'c-kontakt',lbl:'Kontaktirani',val:Math.round(totalKontakt),src:'Prijave tabela',pct:totalPrijave>0?pct(totalKontakt,totalPrijave)+' od prijava':'',sub:`<div class="kpi-bl-sub"><span>${Math.round(totalZakazaniPrijave)}</span> zakazanih · ${totalKontakt>0?pct(totalZakazaniPrijave,totalKontakt)+' konverzija':''}</div>`},
+    {cls:'c-rt',lbl:'RT Razgovori',val:totalRT,src:'RT tabela',pct:'',sub:`<div class="kpi-bl-sub"><span>${rtK1}</span> 1.krug · <span>${rtK2}</span> 2.krug</div>`},
     {cls:'c-bl',lbl:'Prosleđeni BL',val:totalBL+bl2krug,src:'BL + RT 2.krug',pct:totalRT>0?pct(totalBL+bl2krug,totalRT)+' od RT':'',sub:`<div class="kpi-bl-sub"><span>${bl1}</span> 1.krug (BL) · <span>${bl2krug}</span> 2.krug (RT)</div>`},
     {cls:'c-zaposlen',lbl:'Zaposleni',val:countStatus('Zaposlen'),src:'RT + BL',pct:total>0?pct(countStatus('Zaposlen'),total)+' od RT+BL':'',sub:subRT_BL('Zaposlen')},
     {cls:'c-odbijen',lbl:'Odbijen',val:countStatus('Odbijen'),src:'RT + BL',pct:total>0?pct(countStatus('Odbijen'),total):'',sub:subRT_BL('Odbijen')},
@@ -477,6 +622,26 @@ function renderKPI(){
   ];
 
   const row=document.getElementById('kpi-row');
+
+  // Kontaktirani mod — samo 3 kartice
+  if(selKontaktirani){
+    const kCards=[
+      {cls:'c-prijave',lbl:'Prijave',val:Math.round(totalPrijave),src:'Prijave tabela',pct:'',sub:''},
+      {cls:'c-kontakt',lbl:'Kontaktirani',val:Math.round(totalKontakt),src:'Prijave tabela',pct:totalPrijave>0?pct(totalKontakt,totalPrijave)+' od prijava':'',sub:`<div class="kpi-bl-sub"><span>${Math.round(totalZakazaniPrijave)}</span> zakazanih · ${totalKontakt>0?pct(totalZakazaniPrijave,totalKontakt)+' konverzija':''}</div>`},
+      {cls:'c-zakazano',lbl:'Zakazani RT',val:Math.round(totalZakazaniPrijave),src:'Prijave tabela',pct:totalKontakt>0?pct(totalZakazaniPrijave,totalKontakt)+' od kontaktiranih':'',sub:''},
+    ];
+    row.innerHTML=kCards.map(c=>`
+      <div class="kpi-card ${c.cls}" style="min-width:160px;max-width:220px;">
+        <div class="kpi-lbl">${c.lbl}</div>
+        <div class="kpi-val">${c.val}</div>
+        ${c.pct?`<div class="kpi-pct">${c.pct}</div>`:''}
+        ${c.sub||''}
+        <div class="kpi-src">${c.src}</div>
+      </div>
+    `).join('');
+    return;
+  }
+
   row.innerHTML=cards.map(c=>`
     <div class="kpi-card ${c.cls}">
       <div class="kpi-lbl">${c.lbl}</div>
@@ -491,13 +656,46 @@ function renderKPI(){
 function pct(a,b){return b>0?Math.round(a/b*100)+'%':'—';}
 
 function renderTables(){
-  // Row 1: Status | Država | BL (1/2 krug) | Pozicija
-  // Row 2: Grad | Filijala | Mesto prijave | Razlog
-
+  if(selKontaktirani){
+    // Show Prijave-based tables
+    document.getElementById('tables-row1').innerHTML=
+      tblPrijaveByKey('Filijala','Filijala')+tblPrijaveByKey('Grad','Grad')+
+      tblPrijaveByKey('BL','BL')+tblPrijaveByKey('Drzava','Drzava');
+    document.getElementById('tables-row2').innerHTML=
+      tblPrijaveByKey('Mesto prijave','Mesto prijave')+`<div></div><div></div><div></div>`;
+    return;
+  }
+  // Standard tables
   document.getElementById('tables-row1').innerHTML=
     tblStatus()+tblByKey('Država','Drzava')+tblBL()+tblByKey('Pozicija','pozicija');
   document.getElementById('tables-row2').innerHTML=
     tblByKey('Grad','Grad')+tblByKey('Filijala','Filijala')+tblByKey('Mesto prijave','Mesto prijave')+tblRazlog();
+}
+
+function tblPrijaveByKey(label, key){
+  const od=document.getElementById('f-od').value;
+  const doo=document.getElementById('f-do').value;
+  const src=rawPrijave.filter(r=>{
+    if(!od&&!doo)return true;
+    const raw=r['Datum pregleda prijave']||'';if(!raw)return true;
+    const p=new Date(raw);if(isNaN(p))return true;
+    const d=p.toISOString().split('T')[0];
+    if(od&&d<od)return false;if(doo&&d>doo)return false;return true;
+  });
+  const kontakt={}, zakazani={};
+  src.forEach(r=>{
+    const k=(r[key]||'').trim(); if(!k)return;
+    kontakt[k]=(kontakt[k]||0)+parseFloat(r['Broj telefonski kontaktiranih']||0);
+    zakazani[k]=(zakazani[k]||0)+parseFloat(r['Broj zakazanih - RT 1.krug']||0);
+  });
+  const totalK=Object.values(kontakt).reduce((a,b)=>a+b,0);
+  const rows=Object.entries(kontakt).filter(([k,n])=>n>0).sort((a,b)=>b[1]-a[1]);
+  return `<div class="tbl-box"><div class="tbl-hdr">${label}</div><table>
+    <thead><tr><th>Kategorija</th><th class="r">Kontakt.</th><th class="r">Zakaz.</th><th class="r">%</th></tr></thead>
+    <tbody>
+    ${rows.map(([k,n])=>`<tr><td>${k}</td><td class="r">${Math.round(n)}</td><td class="r">${Math.round(zakazani[k]||0)}</td><td class="r">${pct(n,totalK)}</td></tr>`).join('')}
+    <tr class="total"><td>Ukupno</td><td class="r">${Math.round(totalK)}</td><td class="r">${Math.round(Object.values(zakazani).reduce((a,b)=>a+b,0))}</td><td class="r">100%</td></tr>
+    </tbody></table></div>`;
 }
 
 function tblStatus(){
@@ -602,6 +800,9 @@ function fmtDate(d){
     }
   });
 });
+
+// Close dropdowns on outside click — registered once
+document.addEventListener('click', closeAllDropdowns);
 </script>
 </body>
 </html>
