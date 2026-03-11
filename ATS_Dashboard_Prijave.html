@@ -125,7 +125,7 @@ tr:hover td{background:#f8f9fd;}
     <div style="font-size:15px;font-weight:600;margin-bottom:6px">ATS_Prijave.xlsx</div>
     <div style="font-size:12px;margin-bottom:4px">Prevuci fajl ovdje</div>
     <div style="font-size:11px;color:#6a84aa">ili</div>
-    <input type="file" id="file-input" accept=".xlsx,.xls">
+    <input type="file" id="file-input" accept=".xlsx,.xls,.xlsm">
     <button class="drop-btn" onclick="document.getElementById('file-input').click()">Odaberi fajl</button>
   </div>
 </div>
@@ -171,6 +171,8 @@ const FILTER_COLS=[
   {key:'Mesto prijave', label:'Mesto prijave'},
   {key:'KW',            label:'KW'},
 ];
+const STATUS_OPTIONS=['Prosledjeni BL','Zakazani RT','Kontaktirani'];
+let selectedStatuses=new Set();
 let allData=[],filtered=[],selections={};
 
 const dropBox=document.getElementById('drop-box');
@@ -205,6 +207,14 @@ function sumCol(data,col){return data.reduce((s,r)=>s+(parseFloat(r[col])||0),0)
 function unique(data,key){return[...new Set(data.map(r=>r[key]).filter(Boolean))].sort();}
 function konv(k,p){return p>0?Math.round(k/p*100)+'%':'—';}
 
+function rowMatchesStatus(r){
+  if(selectedStatuses.size===0)return true;
+  if(selectedStatuses.has('Prosledjeni BL')&&(parseFloat(r['Broj prosledjenih - BL 1.krug'])||0)>0)return true;
+  if(selectedStatuses.has('Zakazani RT')&&(parseFloat(r['Broj zakazanih - RT 1.krug'])||0)>0)return true;
+  if(selectedStatuses.has('Kontaktirani')&&(parseFloat(r['Broj telefonski kontaktiranih'])||0)>0)return true;
+  return false;
+}
+
 function buildFilterUI(){
   const bar=document.getElementById('filters-bar');
   bar.querySelectorAll('.ms-wrap').forEach(el=>el.remove());
@@ -232,7 +242,50 @@ function buildFilterUI(){
     wrap.appendChild(btn);wrap.appendChild(dd);
     bar.insertBefore(wrap,firstSep);
   });
+  // Status filter
+  const statusWrap=document.createElement('div');
+  statusWrap.className='ms-wrap';statusWrap.dataset.key='Status';
+  const statusBtn=document.createElement('button');
+  statusBtn.className='ms-btn';statusBtn.id='status-btn';
+  statusBtn.innerHTML=`<span class="lbl">Status</span><span class="arrow">▼</span>`;
+  statusBtn.onclick=e=>{e.stopPropagation();toggleDropdown(statusWrap);};
+  const statusDd=document.createElement('div');statusDd.className='ms-dropdown';
+  const statusList=document.createElement('div');statusList.className='ms-list';
+  STATUS_OPTIONS.forEach(v=>{
+    const item=document.createElement('div');item.className='ms-item';
+    const cbId=`cb-status-${v.replace(/\s/g,'-')}`;
+    item.innerHTML=`<input type="checkbox" id="${cbId}" value="${v}"><label for="${cbId}">${v}</label>`;
+    item.querySelector('input').addEventListener('change',()=>{
+      selectedStatuses=new Set();
+      statusList.querySelectorAll('input:checked').forEach(cb=>selectedStatuses.add(cb.value));
+      const cnt=selectedStatuses.size;
+      statusBtn.classList.toggle('active',cnt>0);
+      statusBtn.innerHTML=cnt>0?`<span class="lbl">Status</span><span class="count">${cnt}</span><span class="arrow">▼</span>`:`<span class="lbl">Status</span><span class="arrow">▼</span>`;
+      applyFilters();
+    });
+    statusList.appendChild(item);
+  });
+  const statusFooter=document.createElement('div');statusFooter.className='ms-footer';
+  statusFooter.innerHTML=`<button class="ms-foot-btn ms-foot-all" onclick="statusList_selectAll()">Sve</button><button class="ms-foot-btn ms-foot-none" onclick="statusList_clearAll()">Ništa</button>`;
+  statusDd.appendChild(statusList);statusDd.appendChild(statusFooter);
+  statusWrap.appendChild(statusBtn);statusWrap.appendChild(statusDd);
+  bar.insertBefore(statusWrap,firstSep);
+
   document.addEventListener('click',()=>document.querySelectorAll('.ms-dropdown.open').forEach(d=>d.classList.remove('open')));
+}
+function statusList_selectAll(){
+  document.querySelectorAll('[data-key="Status"] input[type=checkbox]').forEach(cb=>{cb.checked=true;});
+  selectedStatuses=new Set(STATUS_OPTIONS);
+  document.getElementById('status-btn').classList.add('active');
+  document.getElementById('status-btn').innerHTML=`<span class="lbl">Status</span><span class="count">${STATUS_OPTIONS.length}</span><span class="arrow">▼</span>`;
+  applyFilters();
+}
+function statusList_clearAll(){
+  document.querySelectorAll('[data-key="Status"] input[type=checkbox]').forEach(cb=>{cb.checked=false;});
+  selectedStatuses=new Set();
+  document.getElementById('status-btn').classList.remove('active');
+  document.getElementById('status-btn').innerHTML=`<span class="lbl">Status</span><span class="arrow">▼</span>`;
+  applyFilters();
 }
 function toggleDropdown(wrap){
   const dd=wrap.querySelector('.ms-dropdown');
@@ -265,6 +318,7 @@ function clearSel(key,listId){document.getElementById(listId).querySelectorAll('
 function applyFilters(){
   filtered=allData.filter(r=>{
     for(const f of FILTER_COLS){if(selections[f.key]&&selections[f.key].size>0&&!selections[f.key].has(r[f.key]))return false;}
+    if(!rowMatchesStatus(r))return false;
     return true;
   });
   const od=document.getElementById('f-datum-od').value;
@@ -289,6 +343,7 @@ function resetFilters(){
     const el=document.getElementById(`list-${f.key.replace(/\s/g,'-')}`);
     if(el)el.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.checked=false);
   });
+  statusList_clearAll();
   document.getElementById('f-datum-od').value='';document.getElementById('f-datum-do').value='';
   filtered=[...allData];document.getElementById('filter-info').textContent='';render();
 }
