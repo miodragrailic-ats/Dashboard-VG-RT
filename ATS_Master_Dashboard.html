@@ -254,6 +254,7 @@ const FILTER_COLS=[
 let selProsledjeni=new Set(); // 'BL' | 'RT 2.krug'
 let selRTRazgovori=new Set(); // '1. krug' | '2. krug'
 let selKontaktirani=false;
+let totalDirektno=0;
 
 const STATUS_COLORS={
   'Zaposlen':'--zaposlen','Odbijen':'--odbijen','Odustao':'--odustao',
@@ -406,7 +407,7 @@ function buildFilterUI(){
   });
 
   // ── Special filter: Prosleđeni ──
-  buildSpecialFilter(container, 'prosledjeni', 'Prosleđeni', ['BL (1.krug)','RT (2.krug)'], v=>{
+  buildSpecialFilter(container, 'prosledjeni', 'Prosleđeni', ['BL (1.krug)','RT (2.krug)','Direktno (Prijave)'], v=>{
     selProsledjeni=v; applyFilters();
   });
 
@@ -504,6 +505,9 @@ function applyFilters(){
     if(selProsledjeni.size>0){
       const matchBL=selProsledjeni.has('BL (1.krug)')&&r.tabela==='BL';
       const matchRT2=selProsledjeni.has('RT (2.krug)')&&r.tabela==='RT'&&r.Faza==='2. krug';
+      // Direktno (Prijave) je samo podatak iz Prijave tabele, ne filtrira kandidate
+      const onlyDirektno=selProsledjeni.has('Direktno (Prijave)')&&!selProsledjeni.has('BL (1.krug)')&&!selProsledjeni.has('RT (2.krug)');
+      if(onlyDirektno) return true; // prikaži sve kandidate (tabelice će biti iz Prijave)
       if(!matchBL&&!matchRT2)return false;
     }
     // RT Razgovori filter
@@ -552,15 +556,22 @@ function resetFilters(){
 }
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
+function isDirektnoOnly(){
+  return selProsledjeni.size>0&&selProsledjeni.has('Direktno (Prijave)')&&
+    !selProsledjeni.has('BL (1.krug)')&&!selProsledjeni.has('RT (2.krug)');
+}
+
 function render(){
   renderKPI();
   renderTables();
-  if(!selKontaktirani) renderCandidates();
-  document.getElementById('hdr-badge').textContent=`${filtered.length} kandidata`;
+  const hideCands=selKontaktirani||isDirektnoOnly();
+  if(!hideCands) renderCandidates();
+  const badgeCount=isDirektnoOnly()?Math.round(totalDirektno):filtered.length;
+  document.getElementById('hdr-badge').textContent=`${badgeCount} kandidata`;
   const candWrap=document.querySelector('.cand-wrap');
   const candTitle=document.getElementById('cand-section-title');
-  if(candWrap) candWrap.style.display=selKontaktirani?'none':'block';
-  if(candTitle) candTitle.style.display=selKontaktirani?'none':'block';
+  if(candWrap) candWrap.style.display=hideCands?'none':'block';
+  if(candTitle) candTitle.style.display=hideCands?'none':'block';
 }
 
 function countStatus(status){
@@ -603,12 +614,17 @@ function renderKPI(){
   // Kontaktirani from rawPrijave (aggregated, not filtered by candidate filters)
   let totalZakazaniPrijave=0;
   filteredPrijave.forEach(r=>{totalZakazaniPrijave+=parseFloat(r['Broj zakazanih - RT 1.krug']||0);});
+  totalDirektno=0;
+  filteredPrijave.forEach(r=>{totalDirektno+=parseFloat(r['Broj prosledjenih - BL 1.krug']||0);});
+  // Direktno se prikazuje samo kada nema aktivnog Prosleđeni filtera, ili kada je Direktno eksplicitno selektovan
+  const showDirektno=selProsledjeni.size===0||selProsledjeni.has('Direktno (Prijave)');
+  const totalDirektnoR=showDirektno?Math.round(totalDirektno):0;
 
   const cards=[
     {cls:'c-prijave',lbl:'Prijave',val:Math.round(totalPrijave),src:'Prijave tabela',pct:'',sub:''},
     {cls:'c-kontakt',lbl:'Kontaktirani',val:Math.round(totalKontakt),src:'Prijave tabela',pct:totalPrijave>0?pct(totalKontakt,totalPrijave)+' od prijava':'',sub:`<div class="kpi-bl-sub"><span>${Math.round(totalZakazaniPrijave)}</span> zakazanih · ${totalKontakt>0?pct(totalZakazaniPrijave,totalKontakt)+' konverzija':''}</div>`},
     {cls:'c-rt',lbl:'RT Razgovori',val:totalRT,src:'RT tabela',pct:'',sub:`<div class="kpi-bl-sub"><span>${rtK1}</span> 1.krug · <span>${rtK2}</span> 2.krug</div>`},
-    {cls:'c-bl',lbl:'Prosleđeni BL',val:totalBL+bl2krug,src:'BL + RT 2.krug',pct:totalRT>0?pct(totalBL+bl2krug,totalRT)+' od RT':'',sub:`<div class="kpi-bl-sub"><span>${bl1}</span> 1.krug (BL) · <span>${bl2krug}</span> 2.krug (RT)</div>`},
+    {cls:'c-bl',lbl:'Prosleđeni BL',val:totalBL+bl2krug+totalDirektnoR,src:'BL + RT 2.krug + Prijave',pct:totalRT>0?pct(totalBL+bl2krug+totalDirektnoR,totalRT)+' od RT':'',sub:`<div class="kpi-bl-sub"><span>${bl1}</span> 1.krug (BL)</div><div class="kpi-bl-sub"><span>${bl2krug}</span> 2.krug (RT)</div><div class="kpi-bl-sub"><span>${totalDirektnoR}</span> direktno (Prijave)</div>`},
     {cls:'c-zaposlen',lbl:'Zaposleni',val:countStatus('Zaposlen'),src:'RT + BL',pct:total>0?pct(countStatus('Zaposlen'),total)+' od RT+BL':'',sub:subRT_BL('Zaposlen')},
     {cls:'c-odbijen',lbl:'Odbijen',val:countStatus('Odbijen'),src:'RT + BL',pct:total>0?pct(countStatus('Odbijen'),total):'',sub:subRT_BL('Odbijen')},
     {cls:'c-odustao',lbl:'Odustao',val:countStatus('Odustao'),src:'RT + BL',pct:total>0?pct(countStatus('Odustao'),total):'',sub:subRT_BL('Odustao')},
@@ -622,6 +638,21 @@ function renderKPI(){
   ];
 
   const row=document.getElementById('kpi-row');
+
+  // Direktno mod — samo 1 kartica
+  if(isDirektnoOnly()){
+    const dCards=[
+      {cls:'c-bl',lbl:'Direktno prosleđeni',val:totalDirektnoR,src:'Prijave tabela',pct:'',sub:''},
+    ];
+    row.innerHTML=dCards.map(c=>`
+      <div class="kpi-card ${c.cls}" style="min-width:160px;max-width:220px;">
+        <div class="kpi-lbl">${c.lbl}</div>
+        <div class="kpi-val">${c.val}</div>
+        <div class="kpi-src">${c.src}</div>
+      </div>
+    `).join('');
+    return;
+  }
 
   // Kontaktirani mod — samo 3 kartice
   if(selKontaktirani){
@@ -656,13 +687,13 @@ function renderKPI(){
 function pct(a,b){return b>0?Math.round(a/b*100)+'%':'—';}
 
 function renderTables(){
-  if(selKontaktirani){
-    // Show Prijave-based tables
+  if(selKontaktirani||isDirektnoOnly()){
+    const d=isDirektnoOnly();
     document.getElementById('tables-row1').innerHTML=
-      tblPrijaveByKey('Filijala','Filijala')+tblPrijaveByKey('Grad','Grad')+
-      tblPrijaveByKey('BL','BL')+tblPrijaveByKey('Drzava','Drzava');
+      tblPrijaveByKey('Filijala','Filijala',d)+tblPrijaveByKey('Grad','Grad',d)+
+      tblPrijaveByKey('BL','BL',d)+tblPrijaveByKey('Drzava','Drzava',d);
     document.getElementById('tables-row2').innerHTML=
-      tblPrijaveByKey('Mesto prijave','Mesto prijave')+`<div></div><div></div><div></div>`;
+      tblPrijaveByKey('Mesto prijave','Mesto prijave',d)+`<div></div><div></div><div></div>`;
     return;
   }
   // Standard tables
@@ -672,7 +703,7 @@ function renderTables(){
     tblByKey('Grad','Grad')+tblByKey('Filijala','Filijala')+tblByKey('Mesto prijave','Mesto prijave')+tblRazlog();
 }
 
-function tblPrijaveByKey(label, key){
+function tblPrijaveByKey(label, key, direktno=false){
   const od=document.getElementById('f-od').value;
   const doo=document.getElementById('f-do').value;
   const src=rawPrijave.filter(r=>{
@@ -682,6 +713,21 @@ function tblPrijaveByKey(label, key){
     const d=p.toISOString().split('T')[0];
     if(od&&d<od)return false;if(doo&&d>doo)return false;return true;
   });
+  if(direktno){
+    const counts={};
+    src.forEach(r=>{
+      const k=(r[key]||'').trim();if(!k)return;
+      counts[k]=(counts[k]||0)+parseFloat(r['Broj prosledjenih - BL 1.krug']||0);
+    });
+    const total=Object.values(counts).reduce((a,b)=>a+b,0);
+    const rows=Object.entries(counts).filter(([k,n])=>n>0).sort((a,b)=>b[1]-a[1]);
+    return `<div class="tbl-box"><div class="tbl-hdr">${label}</div><table>
+      <thead><tr><th>Kategorija</th><th class="r">Direktno</th><th class="r">%</th></tr></thead>
+      <tbody>
+      ${rows.map(([k,n])=>`<tr><td>${k}</td><td class="r">${Math.round(n)}</td><td class="r">${pct(n,total)}</td></tr>`).join('')}
+      <tr class="total"><td>Ukupno</td><td class="r">${Math.round(total)}</td><td class="r">100%</td></tr>
+      </tbody></table></div>`;
+  }
   const kontakt={}, zakazani={};
   src.forEach(r=>{
     const k=(r[key]||'').trim(); if(!k)return;
